@@ -1,0 +1,169 @@
+'This library helps with the use of the 175100 Call wrapper, Generate Purchase Order from File (PURA64GI). To use it, simply fill out the 175100 datatable with the data for a single call to the call wrapper in each row.
+'Then fill out the 175100File datatable with a row for each line in the PO. The two datatables are linked on the ID field. This defaults to 1, meaning if only a single row is added to the 175100 datatable and multiple rows
+'are added to the 175100File datatable and the library is called then every line in the 175100 Datatable will be built into one file. This will generate a unique PO for each unique Vendor in the 175100File Datatable. Each PO will
+'contain all of the lines for that vendor that existed in the file. If you need to generate multiple POs with a single call of 175100Sync/Async then add multiple rows to the 175100 Datatable, each with a unique ID. 
+'For each ID, add each line for the PO to 175100File with the same ID. Once the data is set as you want, call either 175100Sync or 175100Async to have the library run.
+'The 175100 datatable is structed as follows:
+'Column			=	Parameter				=	Possible Values
+'================================================================================================================
+'ID				=	ID for datatable linkage=	Long (defaults to 1)
+'File			=	File Name				=	Defaults to cccttt175100.txt
+'AutoNumber		=	Auto Number Flag		=	Y/N
+'AddComments	=	Add Comments Flag		=	Y/N
+'OpenPO			=	Open PO Flag			=	Y/N
+'================================================================================================================
+
+'The 175100File Datatable is structed as follows:
+'================================================================================================================
+'ID				=	ID for datatable linkage=	Long (defaults to 1)
+'Vendor			=	Vendor Number			=	X(7)
+'Part			=	Part Number				=	X(20)
+'Loc			=	Location				=	X(2)
+'DueDate		=	Due Date				=	YYYYMMDD
+'PartDesc		=	Part Description		=	X(50)
+'InvUM			=	Inventory UM			=	X(2)
+'InvCost		=	Inventory Cost			=	Numeric 10.6
+'InvQty			=	Inventory Quantity		=	Numeric 9.4
+'POUM			=	PO UM					=	X(2)
+'POCost			=	PO Cost					=	Numeric 10.6
+'POQty			=	PO Quantity				=	Numeric 9.4
+'GLAccount		=	GL Account				=	X(15)
+'Extension		=	Extension				=	Numeric 8.2
+'Job			=	Extension				=	X(6)
+'Suffix			=	Extension				=	X(3)
+'Sequence		=	Extension				=	X(6)
+'================================================================================================================
+
+Program.Sub.Preflight.Start
+V.Global.s175100Error.Declare(String)
+V.Global.s175100FileName.Declare(String)
+V.Global.s175100FilePath.Declare(String)
+F.Intrinsic.String.Build("{0}{1}175100.txt",V.Caller.CompanyCode,V.Caller.Terminal,V.Global.s175100FileName)
+F.Intrinsic.String.Build("{0}\{1}",V.Caller.FilesDir,V.Global.s175100FileName,V.Global.s175100FilePath)
+
+F.Data.DataTable.Create("175100",True)
+F.Data.DataTable.AddColumn("175100","ID","Long",1)
+F.Data.DataTable.AddColumn("175100","File","String",V.Global.s175100FilePath)
+F.Data.DataTable.AddColumn("175100","AutoNumber","String")
+F.Data.DataTable.AddColumn("175100","AddComments","String")
+F.Data.DataTable.AddColumn("175100","OpenPO","String")
+
+F.Data.DataTable.Create("175100File",True)
+F.Data.DataTable.AddColumn("175100File","ID","Long",1)
+F.Data.DataTable.AddColumn("175100File","Vendor","String")
+F.Data.DataTable.AddColumn("175100File","Part","String")
+F.Data.DataTable.AddColumn("175100File","Loc","String")
+F.Data.DataTable.AddColumn("175100File","DueDate","String")
+F.Data.DataTable.AddColumn("175100File","Description","String")
+F.Data.DataTable.AddColumn("175100File","InvUM","String")
+F.Data.DataTable.AddColumn("175100File","InvCost","String")
+F.Data.DataTable.AddColumn("175100File","InvQty","String")
+F.Data.DataTable.AddColumn("175100File","POUM","String")
+F.Data.DataTable.AddColumn("175100File","POCost","String")
+F.Data.DataTable.AddColumn("175100File","POQty","String")
+F.Data.DataTable.AddColumn("175100File","GLAccount","String")
+F.Data.DataTable.AddColumn("175100File","Extension","String")
+F.Data.DataTable.AddColumn("175100File","Job","String")
+F.Data.DataTable.AddColumn("175100File","Suffix","String")
+F.Data.DataTable.AddColumn("175100File","Sequence","String")
+
+v.Global.bGroupPO.Declare
+
+Program.Sub.Preflight.End
+
+Program.Sub.175100.Start
+F.Intrinsic.Control.Try
+	V.Local.sParams.Declare(String)
+	V.Local.iCount.Declare(Long,-1)
+	V.Local.sFilter.Declare(String)
+	V.Local.sFileContent.Declare(String)
+	V.Local.sFileContentFinal.Declare(String)
+	
+	F.Intrinsic.Control.If(V.DataTable.175100.RowCount,>,0)
+		f.Intrinsic.Control.If(v.Global.bGroupPO,=,true)
+			'For each row in the 175100 datatable: create a dataview of the related rows from the 175100File datatable, write it to a file, then call the callwrapper.
+			F.Intrinsic.Control.For(V.Local.iCount,0,V.DataTable.175100.RowCount--,1)
+			
+				F.Intrinsic.String.Build("ID = '{0}'",V.DataTable.175100(V.Local.iCount).ID!FieldVal,V.Local.sFilter)
+				F.Data.DataView.Create("175100File","175100FileView",22,V.Local.sFilter,"")
+	
+				F.Data.DataView.ToString("175100File","175100FileView","Vendor*!*Part*!*Loc*!*DueDate*!*Description*!*InvUM*!*InvCost*!*InvQty*!*POUM*!*POCost*!*POQty*!*GLAccount*!*Extension*!*Job*!*Suffix*!*Sequence",V.Ambient.Tab,V.Ambient.NewLine,V.Local.sFileContent)
+				
+				f.Intrinsic.Control.If(v.Local.sFileContentFinal,<>,"")
+					f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sFileContentFinal,v.Ambient.NewLine,v.Local.sFileContent,v.Local.sFileContentFinal)
+				f.Intrinsic.Control.Else
+					v.Local.sFileContentFinal.Set(v.Local.sFileContent)
+				f.Intrinsic.Control.EndIf
+				
+				F.Data.DataView.Close("175100File","175100FileView")
+				
+			F.Intrinsic.Control.Next(V.Local.iCount)
+			F.Intrinsic.File.String2File(V.Global.s175100FilePath,V.Local.sFileContentFinal)
+			
+			F.Intrinsic.String.ConcatCallWrapperArgs(V.DataTable.175100(0).File!FieldVal,V.DataTable.175100(0).AutoNumber!FieldVal,V.DataTable.175100(0).AddComments!FieldVal,V.DataTable.175100(0).OpenPO!FieldVal,V.Local.sParams)
+	
+			F.Intrinsic.Control.SelectCase(V.Args.CallWrapperType)
+				F.Intrinsic.Control.Case(0)
+					F.Global.General.CallWrapperSync(175100,V.Local.sParams)
+				F.Intrinsic.Control.Case(1)
+					F.Global.General.CallWrapperAsync(175100,V.Local.sParams)
+			F.Intrinsic.Control.EndSelect
+		
+		f.Intrinsic.Control.Else
+			'For each row in the 175100 datatable: create a dataview of the related rows from the 175100File datatable, write it to a file, then call the callwrapper.
+			F.Intrinsic.Control.For(V.Local.iCount,0,V.DataTable.175100.RowCount--,1)
+			
+				F.Intrinsic.String.Build("ID = '{0}'",V.DataTable.175100(V.Local.iCount).ID!FieldVal,V.Local.sFilter)
+				F.Data.DataView.Create("175100File","175100FileView",22,V.Local.sFilter,"")
+	
+				F.Data.DataView.ToString("175100File","175100FileView","Vendor*!*Part*!*Loc*!*DueDate*!*Description*!*InvUM*!*InvCost*!*InvQty*!*POUM*!*POCost*!*POQty*!*GLAccount*!*Extension*!*Job*!*Suffix*!*Sequence",V.Ambient.Tab,V.Ambient.NewLine,V.Local.sFileContent)
+				F.Intrinsic.File.String2File(V.Global.s175100FilePath,V.Local.sFileContent)
+				
+				F.Intrinsic.String.ConcatCallWrapperArgs(V.DataTable.175100(V.Local.iCount).File!FieldVal,V.DataTable.175100(V.Local.iCount).AutoNumber!FieldVal,V.DataTable.175100(V.Local.iCount).AddComments!FieldVal,V.DataTable.175100(V.Local.iCount).OpenPO!FieldVal,V.Local.sParams)
+				
+				F.Intrinsic.Control.SelectCase(V.Args.CallWrapperType)
+					F.Intrinsic.Control.Case(0)
+						F.Global.General.CallWrapperSync(175100,V.Local.sParams)
+					F.Intrinsic.Control.Case(1)
+						F.Global.General.CallWrapperAsync(175100,V.Local.sParams)
+				F.Intrinsic.Control.EndSelect
+				
+				F.Data.DataView.Close("175100File","175100FileView")
+				
+			F.Intrinsic.Control.Next(V.Local.iCount)
+				
+		f.Intrinsic.Control.EndIf
+		
+	F.Intrinsic.Control.EndIf
+	
+	F.Data.DataTable.DeleteRow("175100")
+	F.Data.DataTable.DeleteRow("175100File")
+	
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(CatchError175100,"Sub",V.Ambient.CurrentSubroutine,"ErrNo",V.Ambient.ErrorNumber,"ErrDesc",V.Ambient.ErrorDescription,"Row",V.Local.iCount)
+F.Intrinsic.Control.EndTry
+Program.Sub.175100.End
+
+'Calls 175100 with callwrapper type of 0
+Program.Sub.175100Sync.Start
+F.Intrinsic.Control.Try
+	F.Intrinsic.Control.CallSub(175100,"CallWrapperType",0)
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(CatchError175100, "Sub", V.Ambient.CurrentSubroutine, "ErrNo", V.Ambient.ErrorNumber, "ErrDesc", V.Ambient.ErrorDescription,"Row",-2)
+F.Intrinsic.Control.EndTry
+Program.Sub.175100Sync.End
+
+'Calls 175100 with callwrapper type of 1
+Program.Sub.175100Async.Start
+F.Intrinsic.Control.Try
+	F.Intrinsic.Control.CallSub(175100,"CallWrapperType",1)
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.CallSub(CatchError175100, "Sub", V.Ambient.CurrentSubroutine, "ErrNo", V.Ambient.ErrorNumber, "ErrDesc", V.Ambient.ErrorDescription,"Row",-2)
+F.Intrinsic.Control.EndTry
+Program.Sub.175100Async.End
+
+Program.Sub.CatchError175100.Start
+V.Local.iActualRow.Declare(Long)
+F.Intrinsic.Math.Add(V.Args.Row,1,V.Local.iActualRow)
+F.Intrinsic.String.Build("{0}*!*{1}*!*{2}*!*{3}", V.Args.Sub, V.Args.ErrNo, V.Args.ErrDesc,V.Local.iActualRow, V.Global.s175100Error)
+Program.Sub.CatchError175100.End
